@@ -98,61 +98,117 @@ function renderPage(content, className = '') {
 }
 
 function renderHome() {
-  renderPage(`<section class="hero">
-      <h1>云便签 网络剪贴板</h1>
-      <p class="hero-subtitle">无需登录，即开即用。把文本和文件临时放到一个网址上，在另一台设备打开同一网址即可取回。</p>
-      <form class="hero-form" id="open-note-form">
-        <input id="note-name" maxlength="80" autocomplete="off" placeholder="便签名称，可留空自动生成随机名称">
-        <button type="submit">查看云便签</button>
-      </form>
-      <div class="warning-box">严禁存储或传播违法违规内容。临时工具不适合作为永久网盘，重要数据请自行备份并及时删除。</div>
-    </section>
-    <section class="band">
-      <div class="section-title">
-        <span>产品介绍</span>
-        <h2>什么是云便签，如何使用</h2>
+  renderPage(`<section class="relay-hero">
+      <div class="relay-copy">
+        <span class="eyebrow">Self-hosted relay board</span>
+        <h1>把临时信息投递到一个私有中转空间</h1>
+        <p>为 VPS 自部署设计的网络剪贴板。无需账号，创建一个短链接，在手机、电脑或同事设备上打开同一地址取回文本和附件。</p>
+        <div class="trust-strip">
+          <span>URL 隔离</span>
+          <span>可选密码</span>
+          <span>自动过期</span>
+        </div>
       </div>
-      <div class="intro-grid">
-        <div class="panel">
-          <h3>使用方法</h3>
-          <ol class="steps">
-            <li>输入一个便签名称，例如 <code>demo</code>。</li>
-            <li>访问 <code>${escapeHtml(window.location.host)}/demo</code>。</li>
-            <li>输入文本或上传文件，内容会保存到 VPS。</li>
-            <li>其他设备打开同一链接即可复制、下载或继续编辑。</li>
-          </ol>
+      <form class="relay-console" id="open-note-form">
+        <div class="console-head">
+          <span>新建传送台</span>
+          <button type="button" id="random-name">随机名称</button>
         </div>
-        <div class="url-card">
-          <span>URL 结构</span>
-          <strong>${escapeHtml(window.location.origin)}/您的名字</strong>
-          <p>名称支持中英文、数字、下划线和短横线。名称相同即进入同一个便签空间。</p>
+        <label class="console-field">便签名称
+          <input id="note-name" maxlength="80" autocomplete="off" placeholder="例如 project-link，留空自动生成">
+        </label>
+        <div class="name-meter" id="name-meter">
+          <span class="meter-dot"></span>
+          <strong>等待输入名称</strong>
+          <small>简单名称容易被猜到，随机长名称更适合公开网络。</small>
         </div>
+        <label class="console-field">初始有效期
+          <select id="home-expires">
+            ${boot.expiresOptions.map((option) => `<option value="${option.value}" ${option.value === 86400 ? 'selected' : ''}>${option.label}</option>`).join('')}
+          </select>
+        </label>
+        <button class="launch-button" type="submit">进入中转空间</button>
+        <p class="console-note">密码保护在编辑页内设置，避免密码出现在首页跳转地址里。</p>
+      </form>
+    </section>
+    <section class="band compact-band">
+      <div class="section-title">
+        <span>工作流</span>
+        <h2>创建、投递、取回、销毁</h2>
+      </div>
+      <div class="workflow-grid">
+        ${workflow('01', '创建空间', '输入一个名称或生成随机名称，得到专属 URL。')}
+        ${workflow('02', '投递内容', '写入文本、链接或上传临时附件，系统自动保存。')}
+        ${workflow('03', '安全分享', '选择编辑链接或只读链接，必要时设置访问密码。')}
+        ${workflow('04', '完成销毁', '传输完成后主动删除，或等待有效期自动清理。')}
       </div>
     </section>
     <section class="band white">
       <div class="section-title">
-        <span>核心功能</span>
-        <h2>为临时中转而设计</h2>
+        <span>差异化能力</span>
+        <h2>更像一个私有传送台，而不是普通便签</h2>
       </div>
       <div class="feature-grid">
-        ${feature('跨设备同步', '无需注册账号，只要记住链接，手机、电脑、平板都能打开。')}
-        ${feature('自动保存', '编辑文本后自动保存，也可以手动保存确认。')}
-        ${feature('访问密码', '为便签设置密码，服务端只保存加盐哈希，不保存明文密码。')}
-        ${feature('只读分享', '生成只读链接给别人查看，减少误改内容的风险。')}
+        ${feature('名称安全提示', '首页和编辑页都会提示名称是否过短、过常见，减少被猜中的风险。')}
+        ${feature('状态化编辑器', '顶部状态栏直接展示保存状态、有效期和密码保护状态。')}
+        ${feature('安全侧栏', '把访问模式、只读分享、编辑链接和销毁动作放在同一个操作区。')}
         ${feature('文件附件', '支持临时上传文件，默认单文件最大 50 MB，可用环境变量调整。')}
-        ${feature('自动过期', '便签在有效期内被访问会续期，超期后自动清理。')}
+        ${feature('透明边界', '明确说明服务器端不是端到端加密，适合临时中转而非长期密存。')}
+        ${feature('VPS 友好', '无数据库依赖，数据落盘，Nginx 反代即可部署。')}
       </div>
     </section>`, 'home-page');
 
+  const nameInput = $('#note-name');
+  const meter = $('#name-meter');
+  const updateMeter = () => {
+    const assessment = assessName(nameInput.value);
+    meter.className = `name-meter ${assessment.level}`;
+    meter.querySelector('strong').textContent = assessment.title;
+    meter.querySelector('small').textContent = assessment.detail;
+  };
+
+  nameInput.addEventListener('input', updateMeter);
+  $('#random-name').addEventListener('click', () => {
+    nameInput.value = randomClientName();
+    updateMeter();
+    nameInput.focus();
+  });
+
   $('#open-note-form').addEventListener('submit', (event) => {
     event.preventDefault();
-    const name = $('#note-name').value.trim();
-    window.location.href = name ? `/${encodeName(name)}` : '/new/';
+    const name = nameInput.value.trim();
+    const expiresIn = $('#home-expires').value;
+    window.location.href = name ? `/${encodeName(name)}?expiresIn=${expiresIn}` : `/new/?expiresIn=${expiresIn}`;
   });
 }
 
 function feature(title, text) {
   return `<article class="feature-card"><h3>${title}</h3><p>${text}</p></article>`;
+}
+
+function workflow(step, title, text) {
+  return `<article class="workflow-card"><span>${step}</span><h3>${title}</h3><p>${text}</p></article>`;
+}
+
+function randomClientName() {
+  const bytes = new Uint8Array(8);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (byte) => byte.toString(36).padStart(2, '0')).join('').slice(0, 14);
+}
+
+function assessName(name) {
+  const value = String(name || '').trim();
+  const weakNames = new Set(['test', 'demo', 'admin', '123', 'abc', 'note', 'webnote']);
+  if (!value) {
+    return { level: 'idle', title: '等待输入名称', detail: '留空会自动生成随机名称。' };
+  }
+  if (value.length < 6 || weakNames.has(value.toLowerCase())) {
+    return { level: 'weak', title: '名称偏简单', detail: '这个名称可能被猜到，建议改长或使用随机名称。' };
+  }
+  if (value.length < 12) {
+    return { level: 'medium', title: '名称可用', detail: '适合普通临时内容；私密内容建议再设置访问密码。' };
+  }
+  return { level: 'strong', title: '名称较安全', detail: '随机长名称更难被猜到，仍建议敏感内容设置密码。' };
 }
 
 function renderStaticPage(kind) {
@@ -243,13 +299,15 @@ async function loadNote() {
 }
 
 function normalizePublicNote(note) {
+  const defaultExpiresIn = Number(boot.initialExpiresIn) || boot.expiresOptions?.[2]?.value || 86400;
   return {
     exists: false,
     text: '',
     files: [],
-    expiresIn: boot.expiresOptions?.[2]?.value || 86400,
+    expiresIn: note?.exists ? note.expiresIn : defaultExpiresIn,
     stats: { chars: 0, lines: 1, files: 0 },
     ...note,
+    expiresIn: note?.exists ? note.expiresIn : defaultExpiresIn,
     name: note?.name || noteState.name
   };
 }
@@ -287,7 +345,10 @@ function renderNote() {
 
   root.innerHTML = `<div class="note-app">
     <header class="note-topbar">
-      <a class="note-brand" href="/">云便签</a>
+      <div class="note-identity">
+        <a class="note-brand" href="/">云便签</a>
+        <span>${escapeHtml(note.name || noteState.name)}</span>
+      </div>
       <div class="topbar-settings">
         <label>保留
           <select id="expires-select" ${noteState.readonly ? 'disabled' : ''}>
@@ -319,6 +380,7 @@ function renderNote() {
           <button id="copy-text">复制</button>
           <button id="download-text">下载 TXT</button>
         </div>
+        ${securityCardHtml(note)}
         <div class="stat-card">
           <h3>统计信息</h3>
           <div class="stats">
@@ -348,13 +410,34 @@ function renderNote() {
         </div>
         <div class="danger-zone">
           <button id="report-btn">举报冻结</button>
-          <button id="delete-btn" ${noteState.readonly ? 'disabled' : ''}>删除便签</button>
+          <button id="delete-btn" ${noteState.readonly ? 'disabled' : ''}>完成并销毁</button>
         </div>
       </aside>
     </div>
   </div>`;
 
   bindNoteEvents();
+}
+
+function securityCardHtml(note) {
+  const assessment = assessName(note.name || noteState.name);
+  const passwordText = note.hasPassword ? '已开启访问密码' : '未设置访问密码';
+  const shareText = noteState.readonly ? '当前为只读分享视图' : '编辑链接可修改内容';
+  return `<div class="security-card ${assessment.level}">
+    <div class="security-score">
+      <span></span>
+      <div>
+        <h3>保密状态</h3>
+        <strong>${assessment.title}</strong>
+      </div>
+    </div>
+    <dl>
+      <div><dt>名称风险</dt><dd>${assessment.detail}</dd></div>
+      <div><dt>密码保护</dt><dd>${passwordText}</dd></div>
+      <div><dt>访问模式</dt><dd>${shareText}</dd></div>
+      <div><dt>存储边界</dt><dd>服务器本地明文存储，不是端到端加密。</dd></div>
+    </dl>
+  </div>`;
 }
 
 function statusText(note) {
@@ -403,7 +486,11 @@ function shareHtml(note) {
   const readLink = appUrl(`/p/${note.shareId}`);
   const link = noteState.linkMode === 'readonly' ? readLink : editLink;
   const label = noteState.linkMode === 'readonly' ? '他人只能查看内容：' : '他人可编辑内容：';
-  return `<p class="hint">${label}</p>
+  return `<div class="share-mode-card ${noteState.linkMode}">
+      <strong>${noteState.linkMode === 'readonly' ? '只读投递' : '协作编辑'}</strong>
+      <p>${noteState.linkMode === 'readonly' ? '适合发给只需要查看或下载的人。' : '拥有该链接的人可以修改内容，请谨慎分享。'}</p>
+    </div>
+    <p class="hint">${label}</p>
     <div class="share-box">
       <input id="share-link" readonly value="${escapeHtml(link)}">
       <button id="copy-link">复制</button>
@@ -603,7 +690,7 @@ async function deleteFile(fileId) {
 }
 
 async function deleteNote() {
-  if (!confirm('确定删除整个便签和所有附件吗？删除后不可恢复。')) return;
+  if (!confirm('确认传输完成并销毁整个便签和所有附件吗？销毁后不可恢复。')) return;
   try {
     await request(`/api/notes/${encodeName(noteState.name)}`, { method: 'DELETE' });
     sessionStorage.removeItem(tokenKey(noteState.name));

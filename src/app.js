@@ -75,6 +75,11 @@ function parseNoteBody(req) {
   };
 }
 
+function parseInitialExpiresIn(req) {
+  const value = Number.parseInt(req.query.expiresIn, 10);
+  return expiresOptions.some((option) => option.value === value) ? value : undefined;
+}
+
 function pageShell({ title, description, boot = {}, appMode = 'note' }) {
   const bootJson = JSON.stringify({
     baseUrl: config.baseUrl,
@@ -243,8 +248,10 @@ export function createApp() {
     }
   });
 
-  app.get(['/new', '/new/'], (_req, res) => {
-    res.redirect(`/${randomNoteName()}`);
+  app.get(['/new', '/new/'], (req, res) => {
+    const expiresIn = parseInitialExpiresIn(req);
+    const suffix = expiresIn ? `?expiresIn=${expiresIn}` : '';
+    res.redirect(`/${randomNoteName()}${suffix}`);
   });
 
   app.get('/p/:shareId', (req, res) => {
@@ -308,10 +315,11 @@ export function createApp() {
     try {
       const { name, autoPassword } = splitNameAndPassword(req.params.rawName);
       normalizeName(name);
+      const initialExpiresIn = parseInitialExpiresIn(req);
       res.send(pageShell({
         title: `${name} - 云便签`,
         description: '在线云便签详情页。',
-        boot: { name, autoPassword },
+        boot: { name, autoPassword, initialExpiresIn },
         appMode: 'note'
       }));
     } catch (error) {
