@@ -1,0 +1,25 @@
+{
+  "name": "webnote-vps",
+  "version": "1.0.0",
+  "description": "A lightweight no-login cloud clipboard and temporary note sharing service.",
+  "type": "module",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "NODE_ENV=development node --watch src/server.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "compression": "^1.8.1",
+    "express": "^5.1.0",
+    "helmet": "^8.1.0",
+    "multer": "^2.0.2",
+    "qrcode": "^1.5.4"
+  },
+  "devDependencies": {
+    "supertest": "^7.1.4"
+  }
+}
