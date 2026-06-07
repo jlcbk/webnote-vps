@@ -25,33 +25,116 @@ http://localhost:3000
 
 ## VPS 部署
 
-1. 安装 Node.js 20 或更高版本。
-2. 上传本目录到服务器，例如 `/opt/webnote-vps`。
-3. 配置 `.env`，至少修改：
+下面以 Ubuntu 22.04/24.04 为例。部署前先完成两件事：
+
+- 域名 DNS 的 `A` 记录指向 VPS 公网 IP。
+- VPS 防火墙放行 `80` 和 `443` 端口。
+
+如果使用 UFW，可以执行：
 
 ```bash
-APP_BASE_URL=https://你的域名
-APP_SECRET=一段足够长的随机字符串
+sudo ufw allow OpenSSH
+sudo ufw allow 80/tcp
+sudo ufw allow 443/tcp
+sudo ufw enable
+```
+
+推荐使用 Docker Compose，升级和迁移更简单。也可以用 Node.js + PM2 直接运行。
+
+### 方式 A：Docker Compose 推荐
+
+1. 安装基础组件：
+
+```bash
+sudo apt update
+sudo apt install -y git docker.io docker-compose-plugin nginx certbot python3-certbot-nginx
+sudo systemctl enable --now docker nginx
+```
+
+2. 拉取项目：
+
+```bash
+sudo mkdir -p /opt/webnote-vps
+sudo chown "$USER":"$USER" /opt/webnote-vps
+git clone https://github.com/jlcbk/webnote-vps.git /opt/webnote-vps
+cd /opt/webnote-vps
+```
+
+3. 配置环境变量：
+
+```bash
+cp .env.example .env
+openssl rand -hex 32
+```
+
+编辑 `.env`，至少修改这些值：
+
+```bash
+APP_BASE_URL=https://your-domain.example
+APP_SECRET=把上一步生成的随机字符串填到这里
+HOST=0.0.0.0
 PORT=3000
+TRUST_PROXY=loopback
+DATA_DIR=/app/data
+MAX_FILE_SIZE_MB=50
+```
+
+4. 启动应用：
+
+```bash
+docker compose up -d --build
+docker compose ps
+curl http://127.0.0.1:3000/api/health
+```
+
+Docker Compose 会把数据挂载到宿主机的 `/opt/webnote-vps/data`。迁移或备份时重点保留这个目录和 `.env`。
+
+### 方式 B：Node.js + PM2
+
+1. 安装 Node.js 22、Git、Nginx、Certbot：
+
+```bash
+curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+sudo apt update
+sudo apt install -y nodejs git nginx certbot python3-certbot-nginx
+sudo npm install -g pm2
+```
+
+2. 拉取并配置项目：
+
+```bash
+sudo mkdir -p /opt/webnote-vps
+sudo chown "$USER":"$USER" /opt/webnote-vps
+git clone https://github.com/jlcbk/webnote-vps.git /opt/webnote-vps
+cd /opt/webnote-vps
+cp .env.example .env
+openssl rand -hex 32
+```
+
+编辑 `.env`：
+
+```bash
+APP_BASE_URL=https://your-domain.example
+APP_SECRET=把随机字符串填到这里
 HOST=127.0.0.1
+PORT=3000
+TRUST_PROXY=loopback
+DATA_DIR=./data
 ```
 
-4. 安装依赖并启动：
+3. 安装依赖并用 PM2 托管：
 
 ```bash
-npm install --omit=dev
-npm start
-```
-
-推荐用 `pm2` 托管：
-
-```bash
-npm install -g pm2
+npm ci --omit=dev
 pm2 start src/server.js --name webnote-vps
 pm2 save
+pm2 startup
+curl http://127.0.0.1:3000/api/health
 ```
 
-5. 用 Nginx 反向代理到本服务：
+### 配置 Nginx 反向代理
+
+把下面内容保存为 `/etc/nginx/sites-available/webnote-vps`，把域名替换成你自己的域名：
 
 ```nginx
 server {
@@ -71,18 +154,51 @@ server {
 }
 ```
 
-生产环境建议再用 Certbot 配置 HTTPS。
-
-## Docker 部署
-
-也可以直接用 Docker Compose：
+启用配置并检查：
 
 ```bash
-cp .env.example .env
+sudo ln -s /etc/nginx/sites-available/webnote-vps /etc/nginx/sites-enabled/webnote-vps
+sudo nginx -t
+sudo systemctl reload nginx
+```
+
+### 配置 HTTPS
+
+```bash
+sudo certbot --nginx -d your-domain.example
+```
+
+证书签发成功后，访问 `https://your-domain.example/api/health`，返回 `{"ok":true,...}` 即表示部署成功。
+
+### 升级
+
+Docker Compose：
+
+```bash
+cd /opt/webnote-vps
+git pull
 docker compose up -d --build
 ```
 
-默认会把数据挂载到宿主机的 `./data` 目录。
+Node.js + PM2：
+
+```bash
+cd /opt/webnote-vps
+git pull
+npm ci --omit=dev
+pm2 restart webnote-vps
+```
+
+### 备份和恢复
+
+数据主要在 `data/`，配置在 `.env`。备份示例：
+
+```bash
+cd /opt/webnote-vps
+tar -czf "webnote-backup-$(date +%F).tar.gz" .env data
+```
+
+恢复时把 `.env` 和 `data/` 放回项目目录，再重启服务。
 
 ## 环境变量
 
