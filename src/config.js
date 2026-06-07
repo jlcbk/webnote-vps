@@ -16,6 +16,7 @@ export const config = {
   port: numberFromEnv('PORT', 3000),
   baseUrl: process.env.APP_BASE_URL || `http://localhost:${numberFromEnv('PORT', 3000)}`,
   appSecret: process.env.APP_SECRET || crypto.createHash('sha256').update('webnote-vps-dev-secret').digest('hex'),
+  trustProxy: process.env.TRUST_PROXY || '',
   dataDir: path.resolve(projectRoot, process.env.DATA_DIR || 'data'),
   maxTextChars: numberFromEnv('MAX_TEXT_CHARS', 200000),
   maxFileSizeBytes: numberFromEnv('MAX_FILE_SIZE_MB', 50) * 1024 * 1024,

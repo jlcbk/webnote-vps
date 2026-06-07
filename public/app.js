@@ -1,4 +1,4 @@
-const boot = JSON.parse(document.getElementById('boot')?.textContent || '{}');
+const boot = JSON.parse(document.body.dataset.boot || '{}');
 const pageMode = document.body.dataset.mode || 'home';
 const root = document.getElementById('page');
 

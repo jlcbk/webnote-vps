@@ -73,6 +73,17 @@ server {
 
 生产环境建议再用 Certbot 配置 HTTPS。
 
+## Docker 部署
+
+也可以直接用 Docker Compose：
+
+```bash
+cp .env.example .env
+docker compose up -d --build
+```
+
+默认会把数据挂载到宿主机的 `./data` 目录。
+
 ## 环境变量
 
 | 变量 | 默认值 | 说明 |
@@ -81,10 +92,15 @@ server {
 | `HOST` | `0.0.0.0` | 监听地址 |
 | `APP_BASE_URL` | `http://localhost:3000` | 生成分享链接时的站点地址 |
 | `APP_SECRET` | 开发默认值 | 签发临时编辑 token，用于生产时必须修改 |
+| `TRUST_PROXY` | 空 | 使用 Nginx/Caddy 反代时建议设为 `loopback` |
 | `DATA_DIR` | `./data` | 便签和附件存储目录 |
 | `MAX_TEXT_CHARS` | `200000` | 单便签最大字符数 |
 | `MAX_FILE_SIZE_MB` | `50` | 单文件最大体积 |
 | `MAX_FILES_PER_NOTE` | `10` | 单便签最大附件数 |
+
+## 安全加固
+
+当前版本默认启用 Helmet 安全响应头和严格 CSP，只允许加载本站脚本、样式、图片和 API。API、解锁、上传、举报接口都带有内存限流。便签数据写入采用临时文件加 `rename` 的原子替换方式，降低写入中断造成 JSON 损坏的风险。
 
 ## API 示例
 

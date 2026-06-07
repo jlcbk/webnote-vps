@@ -1,0 +1,16 @@
+services:
+  webnote:
+    build: .
+    container_name: webnote-vps
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      HOST: 0.0.0.0
+      PORT: 3000
+      DATA_DIR: /app/data
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./data:/app/data

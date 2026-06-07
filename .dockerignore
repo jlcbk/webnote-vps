@@ -1,0 +1,8 @@
+.git
+.github
+node_modules
+data
+.env
+npm-debug.log*
+coverage
+.DS_Store

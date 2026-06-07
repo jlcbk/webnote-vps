@@ -25,6 +25,7 @@ import {
   upsertNote
 } from './storage.js';
 import { passwordFingerprint, signToken, verifyPassword, verifyToken } from './auth.js';
+import { createRateLimiter, rateLimitKey } from './rateLimit.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const publicDir = path.resolve(__dirname, '..', 'public');
@@ -32,6 +33,33 @@ const publicDir = path.resolve(__dirname, '..', 'public');
 const upload = multer({
   dest: tempUploadDir(),
   limits: { fileSize: config.maxFileSizeBytes }
+});
+
+const apiLimiter = createRateLimiter({
+  windowMs: 60 * 1000,
+  max: 240,
+  keyGenerator: (req) => rateLimitKey('api', req.ip, req.path)
+});
+
+const unlockLimiter = createRateLimiter({
+  windowMs: 10 * 60 * 1000,
+  max: 20,
+  message: '解锁尝试过于频繁，请稍后再试',
+  keyGenerator: (req) => rateLimitKey('unlock', req.ip, req.params.name)
+});
+
+const uploadLimiter = createRateLimiter({
+  windowMs: 10 * 60 * 1000,
+  max: 30,
+  message: '上传过于频繁，请稍后再试',
+  keyGenerator: (req) => rateLimitKey('upload', req.ip, req.params.name)
+});
+
+const reportLimiter = createRateLimiter({
+  windowMs: 60 * 60 * 1000,
+  max: 5,
+  message: '举报过于频繁，请稍后再试',
+  keyGenerator: (req) => rateLimitKey('report', req.ip, req.params.name)
 });
 
 function escapeHtml(value) {
@@ -81,13 +109,13 @@ function parseInitialExpiresIn(req) {
 }
 
 function pageShell({ title, description, boot = {}, appMode = 'note' }) {
-  const bootJson = JSON.stringify({
+  const bootJson = escapeHtml(JSON.stringify({
     baseUrl: config.baseUrl,
     maxTextChars: config.maxTextChars,
     maxFileSizeBytes: config.maxFileSizeBytes,
     expiresOptions,
     ...boot
-  }).replaceAll('<', '\\u003c').replaceAll('\u2028', '\\u2028').replaceAll('\u2029', '\\u2029');
+  }));
 
   return `<!doctype html>
 <html lang="zh-CN">
@@ -98,9 +126,8 @@ function pageShell({ title, description, boot = {}, appMode = 'note' }) {
   <title>${escapeHtml(title)}</title>
   <link rel="stylesheet" href="/styles.css">
 </head>
-<body data-mode="${escapeHtml(appMode)}">
+<body data-mode="${escapeHtml(appMode)}" data-boot="${bootJson}">
   <div id="page"></div>
-  <script type="application/json" id="boot">${bootJson}</script>
   <script src="/app.js" defer></script>
 </body>
 </html>`;
@@ -108,12 +135,31 @@ function pageShell({ title, description, boot = {}, appMode = 'note' }) {
 
 export function createApp() {
   const app = express();
+  if (config.trustProxy) app.set('trust proxy', config.trustProxy);
 
-  app.use(helmet({ contentSecurityPolicy: false }));
+  app.use(helmet({
+    contentSecurityPolicy: {
+      useDefaults: true,
+      directives: {
+        'default-src': ["'self'"],
+        'script-src': ["'self'"],
+        'script-src-attr': ["'none'"],
+        'style-src': ["'self'"],
+        'img-src': ["'self'", 'data:'],
+        'connect-src': ["'self'"],
+        'font-src': ["'self'"],
+        'object-src': ["'none'"],
+        'base-uri': ["'self'"],
+        'form-action': ["'self'"],
+        'frame-ancestors': ["'none'"]
+      }
+    }
+  }));
   app.use(compression());
   app.use(express.json({ limit: '1mb' }));
   app.use(express.urlencoded({ extended: false }));
   app.use(express.static(publicDir, { maxAge: '1h' }));
+  app.use('/api/', apiLimiter);
 
   app.get('/api/health', (_req, res) => {
     res.json({ ok: true, name: 'webnote-vps', time: new Date().toISOString() });
@@ -157,7 +203,7 @@ export function createApp() {
     }
   });
 
-  app.post('/api/notes/:name/unlock', async (req, res, next) => {
+  app.post('/api/notes/:name/unlock', unlockLimiter, async (req, res, next) => {
     try {
       const { name } = splitNameAndPassword(req.params.name);
       const note = await loadNote(name, { touch: true });
@@ -190,7 +236,7 @@ export function createApp() {
     }
   });
 
-  app.post('/api/notes/:name/files', upload.single('file'), async (req, res, next) => {
+  app.post('/api/notes/:name/files', uploadLimiter, upload.single('file'), async (req, res, next) => {
     try {
       if (!req.file) throw new HttpError(400, '请选择要上传的文件');
       const { name } = splitNameAndPassword(req.params.name);
@@ -228,7 +274,7 @@ export function createApp() {
     }
   });
 
-  app.post('/api/notes/:name/report', async (req, res, next) => {
+  app.post('/api/notes/:name/report', reportLimiter, async (req, res, next) => {
     try {
       const { name } = splitNameAndPassword(req.params.name);
       res.json(await reportNote(name));

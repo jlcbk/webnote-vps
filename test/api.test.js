@@ -32,6 +32,18 @@ test('creates and reads a public note', async () => {
   assert.equal(response.body.stats.chars, 5);
 });
 
+test('serves pages with strict content security policy', async () => {
+  const response = await request(app).get('/').expect(200);
+  assert.match(response.headers['content-security-policy'], /script-src 'self'/);
+  assert.match(response.text, /data-boot=/);
+  assert.doesNotMatch(response.text, /id="boot"/);
+});
+
+test('preserves initial expiration when creating a random note', async () => {
+  const response = await request(app).get('/new/?expiresIn=604800').expect(302);
+  assert.match(response.headers.location, /\?expiresIn=604800$/);
+});
+
 test('protects note text behind password and unlocks with token', async () => {
   await request(app)
     .put('/api/notes/secret-note')

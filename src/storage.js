@@ -106,8 +106,12 @@ function createEmptyNote(name) {
 
 async function saveNote(note) {
   await ensureDirs();
-  await fs.mkdir(noteDir(note.name), { recursive: true });
-  await fs.writeFile(noteFile(note.name), `${JSON.stringify(note, null, 2)}\n`, 'utf8');
+  const dir = noteDir(note.name);
+  const target = noteFile(note.name);
+  const temp = path.join(dir, `.note-${process.pid}-${Date.now()}-${randomId(4)}.tmp`);
+  await fs.mkdir(dir, { recursive: true });
+  await fs.writeFile(temp, `${JSON.stringify(note, null, 2)}\n`, 'utf8');
+  await fs.rename(temp, target);
   return note;
 }
 
