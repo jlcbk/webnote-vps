@@ -82,12 +82,14 @@ MAX_FILE_SIZE_MB=50
 4. 启动应用：
 
 ```bash
+mkdir -p data
+sudo chown -R 1000:1000 data
 docker compose up -d --build
 docker compose ps
 curl http://127.0.0.1:3000/api/health
 ```
 
-Docker Compose 会把数据挂载到宿主机的 `/opt/webnote-vps/data`。迁移或备份时重点保留这个目录和 `.env`。
+Docker Compose 会把数据挂载到宿主机的 `/opt/webnote-vps/data`，并且只把应用端口绑定到 `127.0.0.1:3000`，由 Nginx 对公网提供访问。迁移或备份时重点保留这个目录和 `.env`。
 
 ### 方式 B：Node.js + PM2
 
@@ -131,6 +133,8 @@ pm2 save
 pm2 startup
 curl http://127.0.0.1:3000/api/health
 ```
+
+应用启动时会自动读取项目目录下的 `.env`。执行 `pm2 startup` 后，按命令输出里的提示再执行一次生成的 `sudo env ... pm2 startup ...` 命令，才能让服务在 VPS 重启后自动恢复。
 
 ### 配置 Nginx 反向代理
 
